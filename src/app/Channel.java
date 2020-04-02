@@ -8,11 +8,19 @@ import java.net.*;
  * the socket lifetime. Provides send-recv interface for socket communication
  */
 public class Channel {
+    String id;
     Socket sock;
     PrintWriter writer;
     BufferedReader reader;
 
     Channel(String ip, int port) throws IOException, UnknownHostException {
+        this.sock = new Socket(ip, port);
+        this.writer = new PrintWriter(this.sock.getOutputStream(), true);
+        this.reader = new BufferedReader(new InputStreamReader(this.sock.getInputStream()));
+    }
+
+    Channel(String ip, int port, String ID) throws IOException, UnknownHostException {
+        this.id = ID;
         this.sock = new Socket(ip, port);
         this.writer = new PrintWriter(this.sock.getOutputStream(), true);
         this.reader = new BufferedReader(new InputStreamReader(this.sock.getInputStream()));

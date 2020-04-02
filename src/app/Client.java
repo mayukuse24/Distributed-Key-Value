@@ -56,7 +56,6 @@ public class Client extends Node {
         PrintWriter writer;
         BufferedReader reader;
         Socket reqSocket = null;
-        Node selectedServer;
         String[] fileList = {"f1", "f2", "f3", "f4"};
         int writeCount = 0,
             totalRequests = 10;
@@ -85,23 +84,23 @@ public class Client extends Node {
             String key = fileList[rand.nextInt(fileList.length)];
 
             // Calculate hash
-            Integer keyHash = key.hashCode() % client.serverList.size();
+            Integer keyHash = key.hashCode();
 
             // Decide whether to read/write
             Integer rwbit = rand.nextInt(2);
 
             List<Integer> serverIndices = new ArrayList<>(
-                Arrays.asList(keyHash, (keyHash + 1) % client.serverList.size(), (keyHash + 2) % client.serverList.size())
+                Arrays.asList(keyHash % client.serverList.size(), (keyHash + 1) % client.serverList.size(), (keyHash + 2) % client.serverList.size())
             );            
 
             // Send read request
             if (rwbit == 0) {                
-                LOGGER.info(String.format("sending read request"));
+                LOGGER.info(String.format("sending read request..."));
 
                 Collections.shuffle(serverIndices);
 
                 for (Integer sidx : serverIndices) {
-                    selectedServer = client.serverList.get(sidx);
+                    Node selectedServer = client.serverList.get(sidx);
 
                     // TODO: Handle failure when connection to server fails. Try next server
                     try {
@@ -162,12 +161,12 @@ public class Client extends Node {
                 List<Channel> serverChnls = new ArrayList<>();
 
                 for (Integer sidx : serverIndices) {
-                    selectedServer = client.serverList.get(sidx);
+                    Node selectedServer = client.serverList.get(sidx);
 
                     Channel chnl = null;
 
                     try {
-                        chnl = new Channel(selectedServer.ip, selectedServer.port);
+                        chnl = new Channel(selectedServer.ip, selectedServer.port, selectedServer.id);
                     }
                     catch (ConnectException ex) {
                         LOGGER.info(String.format("unable to connect to server %s for writing %s:%s", selectedServer.id, key, value));
@@ -180,11 +179,7 @@ public class Client extends Node {
                 if (countNonNullItems(serverChnls) < 2) { // ABORT. Not enough replicas available
                     String abortRequest = String.format("CLIENT:%s:ABORT:%s:%s:%s", client.id, key, value, ts);
                 
-                    for (Integer sidx : serverIndices) {
-                        selectedServer = client.serverList.get(sidx);
-
-                        Channel chnl = serverChnls.get(sidx);
-    
+                    for (Channel chnl : serverChnls) {
                         if (chnl == null) continue;
     
                         LOGGER.info(String.format(
@@ -192,18 +187,14 @@ public class Client extends Node {
                             client.id,
                             key,
                             value,
-                            selectedServer.id,
+                            chnl.id, // Server ID
                             ts
                         ));
                         
                         chnl.send(abortRequest);
                     }
     
-                    for (Integer sidx : serverIndices) {
-                        selectedServer = client.serverList.get(sidx);
-
-                        Channel chnl = serverChnls.get(sidx);
-    
+                    for (Channel chnl : serverChnls) {
                         if (chnl == null) continue;
     
                         String response = chnl.recv();
@@ -212,11 +203,11 @@ public class Client extends Node {
     
                         if (params[0].equals("ACK")) {
                             LOGGER.info(
-                                String.format("sucessful abort to %s for object %s", selectedServer.id, key)
+                                String.format("sucessful abort from %s for object %s", chnl.id, key)
                             );
                         }
                         else {
-                            LOGGER.info(String.format("received abort failure from %s for request %s - %s", selectedServer.id, abortRequest, response));
+                            LOGGER.info(String.format("received abort failure from %s for request %s - %s", chnl.id, abortRequest, response));
                         }
             
                         // Clean up socket
@@ -225,11 +216,7 @@ public class Client extends Node {
                 } else {
                     String writeRequest = String.format("CLIENT:%s:WRITE:%s:%s:%s", client.id, key, value, ts);
                 
-                    for (Integer sidx : serverIndices) {
-                        selectedServer = client.serverList.get(sidx);
-
-                        Channel chnl = serverChnls.get(sidx);
-    
+                    for (Channel chnl : serverChnls) {    
                         if (chnl == null) continue;
     
                         LOGGER.info(String.format(
@@ -237,18 +224,14 @@ public class Client extends Node {
                             client.id,
                             key,
                             value,
-                            selectedServer.id,
+                            chnl.id,
                             ts
                         ));
                         
                         chnl.send(writeRequest);
                     }
     
-                    for (Integer sidx : serverIndices) {
-                        selectedServer = client.serverList.get(sidx);
-                        
-                        Channel chnl = serverChnls.get(sidx);
-    
+                    for (Channel chnl : serverChnls) {    
                         if (chnl == null) continue;
     
                         String response = chnl.recv();
@@ -257,18 +240,17 @@ public class Client extends Node {
     
                         if (params[0].equals("ACK")) {
                             LOGGER.info(
-                                String.format("sucessful write to %s for object %s", selectedServer.id, key)
+                                String.format("sucessful write to %s for object %s", chnl.id, key)
                             );
                         }
                         else {
-                            LOGGER.info(String.format("received write failure from %s for request %s - %s", selectedServer.id, writeRequest, response));
+                            LOGGER.info(String.format("received write failure from %s for request %s - %s", chnl.id, writeRequest, response));
                         }
             
                         // Clean up socket
                         chnl.close();
                     }
                 }
-
             }
         }
     }
