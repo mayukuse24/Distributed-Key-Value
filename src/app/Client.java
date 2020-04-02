@@ -97,6 +97,8 @@ public class Client extends Node {
                     }
                     catch (ConnectException ex) {
                         LOGGER.info(String.format("Unable to connect to server %s for reading %s", selectedServer.id, key));
+
+                        continue;
                     }
 
                     // Create a buffer to send messages
