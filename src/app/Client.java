@@ -80,17 +80,24 @@ public class Client extends Node {
 
             List<Integer> serverIndices = new ArrayList<>(
                 Arrays.asList(keyHash, (keyHash + 1) % client.serverList.size(), (keyHash + 1) % client.serverList.size())
-            );
+            );            
 
             // Send read request
             if (rwbit == 0) {                
+                LOGGER.info(String.format("Executing read request"));
+
                 Collections.shuffle(serverIndices);
 
                 for (Integer sidx : serverIndices) {
                     selectedServer = client.serverList.get(sidx);
 
                     // TODO: Handle failure when connection to server fails. Try next server
-                    reqSocket = new Socket(selectedServer.ip, selectedServer.port);
+                    try {
+                        reqSocket = new Socket(selectedServer.ip, selectedServer.port);
+                    }
+                    catch (ConnectException ex) {
+                        LOGGER.info(String.format("Unable to connect to server %s for reading %s", selectedServer.id, key));
+                    }
 
                     // Create a buffer to send messages
                     writer = new PrintWriter(reqSocket.getOutputStream(), true);
