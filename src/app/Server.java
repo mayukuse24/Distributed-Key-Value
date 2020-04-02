@@ -252,6 +252,21 @@ class requestHandler implements Callable<Integer> {
                     return 0;
                 }
             }
+            else if (action.equals("ABORT")) {
+                try {
+                    this.logInfo(String.format("server %s sends a successful abort ack to client %s", this.owner.id, this.requesterId));
+    
+                    // Send acknowledgement to client for successful write to object
+                    this.requesterChannel.send("ACK");
+                }
+                catch (Exception ex) {
+                    this.logSevere(ex.getMessage(), ex);
+    
+                    this.requesterChannel.send(String.format("ERR: %s", ex.getMessage()));
+    
+                    return 0;
+                }
+            }
         }
         else if (this.requesterType.equals("SERVER")) {
             this.logInfo(String.format("request from file server with identifier: %s", request));
