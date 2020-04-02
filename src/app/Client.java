@@ -79,7 +79,7 @@ public class Client extends Node {
             Integer rwbit = rand.nextInt(2);
 
             List<Integer> serverIndices = new ArrayList<>(
-                Arrays.asList(keyHash, (keyHash + 1) % client.serverList.size(), (keyHash + 1) % client.serverList.size())
+                Arrays.asList(keyHash, (keyHash + 1) % client.serverList.size(), (keyHash + 2) % client.serverList.size())
             );            
 
             // Send read request
@@ -141,7 +141,7 @@ public class Client extends Node {
                 }
             }
             else { // Send write request
-                LOGGER.info("Reached write request");
+                LOGGER.info("Executing write request");
 
                 long ts = Instant.now().toEpochMilli();
 
@@ -150,7 +150,14 @@ public class Client extends Node {
                 for (Integer sidx : serverIndices) {
                     selectedServer = client.serverList.get(sidx);
 
-                    reqSocket = new Socket(selectedServer.ip, selectedServer.port);
+                    try {
+                        reqSocket = new Socket(selectedServer.ip, selectedServer.port);
+                    }
+                    catch (ConnectException ex) {
+                        LOGGER.info(String.format("Unable to connect to server %s for writing %s:%s", selectedServer.id, key, value));
+
+                        continue;
+                    }
 
                     // Create a buffer to send messages
                     writer = new PrintWriter(reqSocket.getOutputStream(), true);
