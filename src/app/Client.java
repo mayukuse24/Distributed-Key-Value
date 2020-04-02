@@ -184,7 +184,7 @@ public class Client extends Node {
 
                     if (params[0].equals("ACK")) {
                         LOGGER.info(
-                            String.format("Server %s: value of object %s : %s", selectedServer.id, key, params[1])
+                            String.format("Sucessful write to %s for object %s", selectedServer.id, key)
                         );
                     }
                     else {

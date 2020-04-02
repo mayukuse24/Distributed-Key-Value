@@ -134,8 +134,10 @@ class requestHandler implements Callable<Integer> {
     public String getLastLine(String file) throws FileNotFoundException, IOException {
         RandomAccessFile fileHandler = null;
 
+        String filePath = String.format("%s/%s", owner.id, file);
+
         try {
-            fileHandler = new RandomAccessFile(file, "r");
+            fileHandler = new RandomAccessFile(filePath, "r");
             
             long fileLength = fileHandler.length() - 1;
             
@@ -281,7 +283,9 @@ class requestHandler implements Callable<Integer> {
     }
 
     private void clientWriteHandler(String obj, String value, String ts) throws IOException {
-        PrintWriter out = new PrintWriter(new FileWriter(obj, true));
+        String filePath = String.format("%s/%s", owner.id, obj);
+
+        PrintWriter out = new PrintWriter(new FileWriter(filePath, true));
 
         out.println(value);
 
