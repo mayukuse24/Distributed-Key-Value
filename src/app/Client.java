@@ -46,9 +46,12 @@ public class Client extends Node {
         Socket reqSocket = null;
         Node selectedServer;
         String[] fileList = {"f1", "f2", "f3", "f4"};
-        int totalRequests = 10;
+        int writeCount = 0,
+            totalRequests = 10;
 
         Random rand = new Random();
+
+        Instant instant = Instant.now();
 
         Applog.init();
 
@@ -75,12 +78,12 @@ public class Client extends Node {
             // Decide whether to read/write
             Integer rwbit = rand.nextInt(2);
 
+            List<Integer> serverIndices = new ArrayList<>(
+                Arrays.asList(keyHash, (keyHash + 1) % client.serverList.size(), (keyHash + 1) % client.serverList.size())
+            );
+
             // Send read request
-            if (rwbit == 0) {
-                List<Integer> serverIndices = new ArrayList<>(
-                    Arrays.asList(keyHash, (keyHash + 1) % client.serverList.size(), (keyHash + 1) % client.serverList.size())
-                ); 
-                
+            if (rwbit == 0) {                
                 Collections.shuffle(serverIndices);
 
                 for (Integer sidx : serverIndices) {
@@ -115,6 +118,10 @@ public class Client extends Node {
                         LOGGER.info(
                             String.format("Server %s: value of object %s : %s", selectedServer.id, key, params[1])
                         );
+
+                        reqSocket.close();
+
+                        break; // Successful read response from any one server is sufficient
                     }
                     else {
                         LOGGER.info(String.format("%s receives a failure from %s: %s", client.id, selectedServer.id, params));
@@ -126,6 +133,51 @@ public class Client extends Node {
             }
             else { // Send write request
                 LOGGER.info("Reached write request");
+
+                long ts = Instant.now().toEpochMilli();
+
+                String value = String.format("Client %s write count %s", client.id, writeCount++);
+
+                for (Integer sidx : serverIndices) {
+                    selectedServer = client.serverList.get(sidx);
+
+                    reqSocket = new Socket(selectedServer.ip, selectedServer.port);
+
+                    // Create a buffer to send messages
+                    writer = new PrintWriter(reqSocket.getOutputStream(), true);
+        
+                    // Create a buffer to receive messages
+                    reader = new BufferedReader(new InputStreamReader(reqSocket.getInputStream()));
+
+                    String writeRequest = String.format("CLIENT:%s:WRITE:%s:%s:%s", client.id, key, value, ts);
+
+                    LOGGER.info(String.format(
+                        "Client %s writing object %s, value %s to server %s at %s",
+                        client.id,
+                        key,
+                        value,
+                        selectedServer.id,
+                        ts
+                    ));
+                    
+                    writer.println(writeRequest);
+
+                    String response = reader.readLine();
+
+                    String[] params = response.split(":", 2);
+
+                    if (params[0].equals("ACK")) {
+                        LOGGER.info(
+                            String.format("Server %s: value of object %s : %s", selectedServer.id, key, params[1])
+                        );
+                    }
+                    else {
+                        LOGGER.info(String.format("%s receives a failure from %s: %s", client.id, selectedServer.id, params));
+                    }
+        
+                    // Clean up socket
+                    reqSocket.close();
+                }
             }
         }
     }

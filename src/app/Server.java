@@ -258,6 +258,8 @@ class requestHandler implements Callable<Integer> {
                 this.serverHandler();
 
                 this.logInfo(String.format("request %s completed successfully", request));
+
+                this.requesterChannel.send("ACK");
             }
             catch (Exception ex) {
                 this.logSevere(
