@@ -40,6 +40,18 @@ public class Client extends Node {
         }  
     }
 
+    public static Integer countNonNullItems(List<? extends Object> arr) {
+        int count = 0;
+
+        for (Object item :  arr) {
+            if (item != null) {
+                count++;
+            }        
+        }
+
+        return count;
+    }
+
     public static void main(String[] args) throws Exception {
         PrintWriter writer;
         BufferedReader reader;
@@ -84,7 +96,7 @@ public class Client extends Node {
 
             // Send read request
             if (rwbit == 0) {                
-                LOGGER.info(String.format("Executing read request"));
+                LOGGER.info(String.format("sending read request"));
 
                 Collections.shuffle(serverIndices);
 
@@ -96,7 +108,7 @@ public class Client extends Node {
                         reqSocket = new Socket(selectedServer.ip, selectedServer.port);
                     }
                     catch (ConnectException ex) {
-                        LOGGER.info(String.format("Unable to connect to server %s for reading %s", selectedServer.id, key));
+                        LOGGER.info(String.format("unable to connect to server %s for reading %s", selectedServer.id, key));
 
                         continue;
                     }
@@ -110,7 +122,7 @@ public class Client extends Node {
                     String readRequest = String.format("CLIENT:%s:READ:%s", client.id, key);
 
                     LOGGER.info(String.format(
-                        "Client %s reading object %s from server %s",
+                        "client %s reading object %s from server %s",
                         client.id,
                         key,
                         selectedServer.id
@@ -125,7 +137,7 @@ public class Client extends Node {
 
                     if (params[0].equals("ACK")) {
                         LOGGER.info(
-                            String.format("Server %s: value of object %s : %s", selectedServer.id, key, params[1])
+                            String.format("server %s: value of object %s : %s", selectedServer.id, key, params[1])
                         );
 
                         reqSocket.close();
@@ -133,7 +145,7 @@ public class Client extends Node {
                         break; // Successful read response from any one server is sufficient
                     }
                     else {
-                        LOGGER.info(String.format("%s receives a failure from %s: %s", client.id, selectedServer.id, params));
+                        LOGGER.info(String.format("received read failure from %s for request %s - %s", selectedServer.id, readRequest, response));
                     }
         
                     // Clean up socket
@@ -141,59 +153,122 @@ public class Client extends Node {
                 }
             }
             else { // Send write request
-                LOGGER.info("Executing write request");
+                LOGGER.info("sending write request...");
 
                 long ts = Instant.now().toEpochMilli();
 
-                String value = String.format("Client %s write count %s", client.id, writeCount++);
+                String value = String.format("client %s write count %s", client.id, writeCount++);
+
+                List<Channel> serverChnls = new ArrayList<>();
 
                 for (Integer sidx : serverIndices) {
                     selectedServer = client.serverList.get(sidx);
 
+                    Channel chnl = null;
+
                     try {
-                        reqSocket = new Socket(selectedServer.ip, selectedServer.port);
+                        chnl = new Channel(selectedServer.ip, selectedServer.port);
                     }
                     catch (ConnectException ex) {
-                        LOGGER.info(String.format("Unable to connect to server %s for writing %s:%s", selectedServer.id, key, value));
-
-                        continue;
+                        LOGGER.info(String.format("unable to connect to server %s for writing %s:%s", selectedServer.id, key, value));
                     }
-
-                    // Create a buffer to send messages
-                    writer = new PrintWriter(reqSocket.getOutputStream(), true);
-        
-                    // Create a buffer to receive messages
-                    reader = new BufferedReader(new InputStreamReader(reqSocket.getInputStream()));
-
-                    String writeRequest = String.format("CLIENT:%s:WRITE:%s:%s:%s", client.id, key, value, ts);
-
-                    LOGGER.info(String.format(
-                        "Client %s writing object %s, value %s to server %s at %s",
-                        client.id,
-                        key,
-                        value,
-                        selectedServer.id,
-                        ts
-                    ));
-                    
-                    writer.println(writeRequest);
-
-                    String response = reader.readLine();
-
-                    String[] params = response.split(":", 2);
-
-                    if (params[0].equals("ACK")) {
-                        LOGGER.info(
-                            String.format("Sucessful write to %s for object %s", selectedServer.id, key)
-                        );
+                    finally {
+                        serverChnls.add(chnl);
                     }
-                    else {
-                        LOGGER.info(String.format("%s receives a failure from %s: %s", client.id, selectedServer.id, params));
-                    }
-        
-                    // Clean up socket
-                    reqSocket.close();
                 }
+
+                if (countNonNullItems(serverChnls) < 2) { // ABORT. Not enough replicas available
+                    String abortRequest = String.format("CLIENT:%s:ABORT:%s:%s:%s", client.id, key, value, ts);
+                
+                    for (Integer sidx : serverIndices) {
+                        selectedServer = client.serverList.get(sidx);
+
+                        Channel chnl = serverChnls.get(sidx);
+    
+                        if (chnl == null) continue;
+    
+                        LOGGER.info(String.format(
+                            "client %s aborting write to object %s, value %s to server %s at %s",
+                            client.id,
+                            key,
+                            value,
+                            selectedServer.id,
+                            ts
+                        ));
+                        
+                        chnl.send(abortRequest);
+                    }
+    
+                    for (Integer sidx : serverIndices) {
+                        selectedServer = client.serverList.get(sidx);
+
+                        Channel chnl = serverChnls.get(sidx);
+    
+                        if (chnl == null) continue;
+    
+                        String response = chnl.recv();
+    
+                        String[] params = response.split(":", 2);
+    
+                        if (params[0].equals("ACK")) {
+                            LOGGER.info(
+                                String.format("sucessful abort to %s for object %s", selectedServer.id, key)
+                            );
+                        }
+                        else {
+                            LOGGER.info(String.format("received abort failure from %s for request %s - %s", selectedServer.id, abortRequest, response));
+                        }
+            
+                        // Clean up socket
+                        chnl.close();
+                    }
+                } else {
+                    String writeRequest = String.format("CLIENT:%s:WRITE:%s:%s:%s", client.id, key, value, ts);
+                
+                    for (Integer sidx : serverIndices) {
+                        selectedServer = client.serverList.get(sidx);
+
+                        Channel chnl = serverChnls.get(sidx);
+    
+                        if (chnl == null) continue;
+    
+                        LOGGER.info(String.format(
+                            "client %s writing object %s, value %s to server %s at %s",
+                            client.id,
+                            key,
+                            value,
+                            selectedServer.id,
+                            ts
+                        ));
+                        
+                        chnl.send(writeRequest);
+                    }
+    
+                    for (Integer sidx : serverIndices) {
+                        selectedServer = client.serverList.get(sidx);
+                        
+                        Channel chnl = serverChnls.get(sidx);
+    
+                        if (chnl == null) continue;
+    
+                        String response = chnl.recv();
+    
+                        String[] params = response.split(":", 2);
+    
+                        if (params[0].equals("ACK")) {
+                            LOGGER.info(
+                                String.format("sucessful write to %s for object %s", selectedServer.id, key)
+                            );
+                        }
+                        else {
+                            LOGGER.info(String.format("received write failure from %s for request %s - %s", selectedServer.id, writeRequest, response));
+                        }
+            
+                        // Clean up socket
+                        chnl.close();
+                    }
+                }
+
             }
         }
     }
