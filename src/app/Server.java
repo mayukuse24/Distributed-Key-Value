@@ -490,8 +490,12 @@ class requestHandler implements Callable<Integer> {
     private void serverReleaseHandler(String obj, String taskOwner, long ts) {
         Task releaseTask = new Task(taskOwner, null, null, null, ts);
 
+        this.logInfo(String.format("Releasing request for task %s", releaseTask));
+
         // Loop until released task not present in queue
         while (this.owner.objToTaskQueue.get(obj).contains(releaseTask)) continue;
+
+        this.logInfo(String.format("Sending release ack for task %s", releaseTask));
         
         // Send ACK
         this.requesterChannel.send("ACK:RELEASE");
