@@ -144,6 +144,7 @@ class requestHandler implements Callable<Integer> {
 
     private void logSevere(String message, Exception ex) {
         LOGGER.log(Level.SEVERE, String.format("%s: %s: %s", this.requesterId, Thread.currentThread().getId(), message), ex);
+        ex.printStackTrace();
     }
 
     // Read the last line of file. Taken from https://stackoverflow.com/questions/686231/quickly-read-the-last-line-of-a-text-file
