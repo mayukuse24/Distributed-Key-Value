@@ -305,7 +305,10 @@ class requestHandler implements Callable<Integer> {
                     return 0;
                 }    
             }
-            else if (action.equals("RELEASE")) {
+
+            String response = this.requesterChannel.recv();
+            
+            if (response.equals("RELEASE")) {
                 try {
                     this.serverReleaseHandler(obj, params[4], Long.parseLong(params[5]));
 
@@ -403,6 +406,12 @@ class requestHandler implements Callable<Integer> {
                 if (reject) {
                     this.logInfo(String.format("task %s rejected, exiting lock", task));
 
+                    for (Channel chnl : serverChnls) {
+                        this.logInfo(String.format("sending reject ack for task %s", task));
+
+                        chnl.send("ACK:REJECT");
+                    }
+
                     // Unlock and retry. Note that retry happens by default until executed = true
                     this.owner.objToLockedTask.remove(obj);
                 }
@@ -419,7 +428,7 @@ class requestHandler implements Callable<Integer> {
                     for (Channel chnl : serverChnls) {
                         this.logInfo(String.format("sending release for task %s", task));
 
-                        chnl.send("ACK:RELEASE");
+                        chnl.send("RELEASE");
                     }
 
                     // Get Ack from all reachable replicas
