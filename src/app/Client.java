@@ -62,8 +62,6 @@ public class Client extends Node {
 
         Random rand = new Random();
 
-        Instant instant = Instant.now();
-
         Applog.init();
 
         if (args.length < 1) {
@@ -257,5 +255,7 @@ public class Client extends Node {
                 }
             }
         }
+
+        LOGGER.info(String.format("Write attempts: %s, Read attempts: %s", writeCount, totalRequests - writeCount));
     }
 }
