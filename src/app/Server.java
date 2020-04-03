@@ -419,7 +419,7 @@ class requestHandler implements Callable<Integer> {
                     for (Channel chnl : serverChnls) {
                         this.logInfo(String.format("sending release for task %s", task));
 
-                        chnl.send(String.format("SERVER:%s:RELEASE:%s:%s:%s", this.owner.id, obj, this.requesterId, ts));
+                        chnl.send("ACK:RELEASE");
                     }
 
                     // Get Ack from all reachable replicas
