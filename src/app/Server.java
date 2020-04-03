@@ -463,7 +463,7 @@ class requestHandler implements Callable<Integer> {
             Task lockedTask = this.owner.objToLockedTask.get(obj);
 
             // Check if locked task is null, then sleep and try again
-            if (lockedTask.equals(null)) {
+            if (lockedTask == null) {
                 Thread.sleep(10);
 
                 continue;
@@ -481,7 +481,8 @@ class requestHandler implements Callable<Integer> {
             // Check if task being voted is behind earliest task in queue, if yes send ACK:REJECT
             Task earliestTask = this.owner.objToTaskQueue.get(obj).peek();
 
-            if (earliestTask.timestamp < voteTask.timestamp || 
+            if (earliestTask == null ||
+                earliestTask.timestamp < voteTask.timestamp || 
                (earliestTask.timestamp == voteTask.timestamp && earliestTask.ownerId.compareTo(voteTask.ownerId) < 0)) {
             
                 this.logInfo(String.format("rejecting vote for task %s", voteTask));
