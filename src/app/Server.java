@@ -407,6 +407,8 @@ class requestHandler implements Callable<Integer> {
                     this.owner.objToLockedTask.remove(obj);
                 }
                 else if (voteCount >= 1) { // If enough replicas ACCEPT
+                    this.logInfo(String.format("task %s accepted, executing...", task));
+
                     // Perform write
                     task.execute();
 
@@ -415,11 +417,15 @@ class requestHandler implements Callable<Integer> {
 
                     // Send release message to reachable replicas. TODO: Convert to multicast function (DRY)
                     for (Channel chnl : serverChnls) {
+                        this.logInfo(String.format("sending release for task %s", task));
+
                         chnl.send(String.format("SERVER:%s:RELEASE:%s:%s:%s", this.owner.id, obj, this.requesterId, ts));
                     }
 
                     // Get Ack from all reachable replicas
                     for (Channel chnl : serverChnls) {
+                        this.logInfo(String.format("waiting for release ack for task %s", task));
+
                         String response = chnl.recv();
 
                         if (!response.equals("ACK:RELEASE")) {
@@ -456,6 +462,8 @@ class requestHandler implements Callable<Integer> {
 
             // Check if locked task same as task being voted, if yes send ACK:ACCEPT
             if (lockedTask.equals(voteTask)) {
+                this.logInfo(String.format("accepting vote for task %s", voteTask));
+
                 this.requesterChannel.send("ACK:ACCEPT");
 
                 break;
@@ -466,10 +474,12 @@ class requestHandler implements Callable<Integer> {
 
             if (earliestTask.timestamp < voteTask.timestamp || 
                (earliestTask.timestamp == voteTask.timestamp && earliestTask.ownerId.compareTo(voteTask.ownerId) < 0)) {
+            
+                this.logInfo(String.format("rejecting vote for task %s", voteTask));
                 
-               this.requesterChannel.send("ACK:REJECT"); 
+                this.requesterChannel.send("ACK:REJECT"); 
 
-               break;
+                break;
             }
 
             // Sleep and try again hoping that locked task is same as task being voted
