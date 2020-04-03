@@ -158,6 +158,8 @@ public class Client extends Node {
 
                 String value = String.format("client %s write count %s", client.id, writeCount++);
 
+                String replicas = "";
+
                 List<Channel> serverChnls = new ArrayList<>();
 
                 for (Integer sidx : serverIndices) {
@@ -167,6 +169,8 @@ public class Client extends Node {
 
                     try {
                         chnl = new Channel(selectedServer.ip, selectedServer.port, selectedServer.id);
+
+                        replicas = String.format("%s,%s", selectedServer.id, replicas);
                     }
                     catch (ConnectException ex) {
                         LOGGER.info(String.format("unable to connect to server %s for writing %s:%s", selectedServer.id, key, value));
@@ -183,7 +187,7 @@ public class Client extends Node {
                         if (chnl == null) continue;
     
                         LOGGER.info(String.format(
-                            "client %s aborting write to object %s, value %s to server %s at %s",
+                            "client %s aborting write to object:%s, value:%s to server %s at %s",
                             client.id,
                             key,
                             value,
@@ -214,13 +218,13 @@ public class Client extends Node {
                         chnl.close();
                     }
                 } else {
-                    String writeRequest = String.format("CLIENT:%s:WRITE:%s:%s:%s", client.id, key, value, ts);
+                    String writeRequest = String.format("CLIENT:%s:WRITE:%s:%s:%s:%s", client.id, key, value, ts, replicas);
                 
                     for (Channel chnl : serverChnls) {    
                         if (chnl == null) continue;
     
                         LOGGER.info(String.format(
-                            "client %s writing object %s, value %s to server %s at %s",
+                            "client %s writing object:%s, value:%s to server %s at %s",
                             client.id,
                             key,
                             value,

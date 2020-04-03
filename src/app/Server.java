@@ -15,14 +15,30 @@ import javax.naming.NameNotFoundException;
  * The primary class for running server instance. 
  */
 public class Server extends Node {
-    public static long externalTime;
-    List<Node> serverList = new ArrayList<Node>();
+    Map<String, Node> idToServer = new HashMap<String, Node>();
+
+    public Map<String, Object> objToLock;
+    public Map<String, Task> objToLockedTask;
 
     private final static Logger LOGGER = Logger.getLogger(Applog.class.getName());
     private static ServerSocket serverSocket;
 
+    public static Task NULL_TASK = new Task(null, null, null, null, (long)0);
+
+    Map<String, PriorityBlockingQueue<Task>> objToTaskQueue =
+        new ConcurrentHashMap<String, PriorityBlockingQueue<Task>>(Node.fileList.length);
+
     public Server(String Id, String Ip, int P) {
         super(Id, Ip, P);
+
+        this.objToLock = new ConcurrentHashMap<String, Object>(100);
+        this.objToLockedTask = new ConcurrentHashMap<String, Task>(100);
+
+        for (String fileName : Node.fileList) {
+            this.objToTaskQueue.put(fileName, new PriorityBlockingQueue<Task>(20, new TaskComparator()));
+
+            this.objToLock.put(fileName, new Object());
+        }
     }
 
     /**
@@ -44,7 +60,7 @@ public class Server extends Node {
             if (!params[0].equals(this.id)) { // Skip adding itself to the server list
                 LOGGER.info(String.format("found server %s, ip=%s, port=%s", params[0], params[1], params[2]));
 
-                this.serverList.add(new Node(params[0], params[1], Integer.parseInt(params[2])));
+                this.idToServer.put(params[0], new Node(params[0], params[1], Integer.parseInt(params[2])));
             }
         }
 
@@ -114,8 +130,8 @@ class requestHandler implements Callable<Integer> {
     Server owner;
     String requesterId,
         requesterType;
-    private final static Logger LOGGER = Logger.getLogger(Applog.class.getName());
 
+    private final static Logger LOGGER = Logger.getLogger(Applog.class.getName());
     
     public requestHandler(Channel chnl, Server own) {
         this.requesterChannel = chnl;
@@ -230,7 +246,7 @@ class requestHandler implements Callable<Integer> {
             }
             else if (action.equals("WRITE")) {
                 try {
-                    this.clientWriteHandler(obj, params[4], params[5]);
+                    this.clientWriteHandler(obj, params[4], Long.parseLong(params[5]), params[6].split(","));
   
                     this.logInfo(String.format("server %s sends a successful ack to client %s", this.owner.id, this.requesterId));
     
@@ -269,24 +285,41 @@ class requestHandler implements Callable<Integer> {
             }
         }
         else if (this.requesterType.equals("SERVER")) {
-            this.logInfo(String.format("request from file server with identifier: %s", request));
+            this.logInfo(String.format("request from file server with identifier %s", request));
 
-            try {
-                this.serverHandler();
+            if (action.equals("VOTE")) {
+                try {
+                    this.serverVoteHandler(obj, params[4], Long.parseLong(params[5]));
+    
+                    this.logInfo(String.format("processed vote for request %s", request));
+                }
+                catch (Exception ex) {
+                    this.logSevere(
+                        String.format("ERR: %s Failed to handle vote request %s", ex.getMessage(), request), 
+                        ex
+                    );
 
-                this.logInfo(String.format("request %s completed successfully", request));
-
-                this.requesterChannel.send("ACK");
+                    this.requesterChannel.send(String.format("ERR: %s", ex.getMessage()));
+    
+                    return 0;
+                }    
             }
-            catch (Exception ex) {
-                this.logSevere(
-                    String.format("ERR: %s Failed to handle request from server %s", ex.getMessage(), this.requesterId), 
-                    ex
-                );
+            else if (action.equals("RELEASE")) {
+                try {
+                    this.serverReleaseHandler(obj, params[4], Long.parseLong(params[5]));
 
-                this.requesterChannel.send(String.format("ERR: %s", ex.getMessage()));
-
-                return 0;
+                    this.logInfo(String.format("confirmed release for request %s", request));
+                }
+                catch (Exception ex) {
+                    this.logSevere(
+                        String.format("ERR: %s Failed to handle release request %s", ex.getMessage(), this.requesterId), 
+                        ex
+                    );
+    
+                    this.requesterChannel.send(String.format("ERR: %s", ex.getMessage()));
+    
+                    return 0;
+                } 
             }
         }
 
@@ -297,17 +330,157 @@ class requestHandler implements Callable<Integer> {
         return getLastLine(obj);
     }
 
-    private void clientWriteHandler(String obj, String value, String ts) throws IOException {
-        String filePath = String.format("%s/%s", owner.id, obj);
+    private void clientWriteHandler(String obj, String value, long ts, String[] replicas) throws IOException, InterruptedException {
+        Task task = new Task(this.requesterId, this.owner.id, obj, value, ts);
 
-        PrintWriter out = new PrintWriter(new FileWriter(filePath, true));
+        // Add task to queue
+        this.owner.objToTaskQueue.get(obj).add(task);
 
-        out.println(value);
+        boolean executed = false;
 
-        out.close();
+        // Keep trying until task succeeds
+        while (!executed) {
+            // Wait for task to reach head of queue
+            while (!this.owner.objToTaskQueue.get(obj).peek().equals(task)) {
+                Thread.sleep(10); // TODO: switch to wait-notify pattern
+            }
+
+            // Lock on object
+            synchronized(this.owner.objToLock.get(obj)) {
+                List<Channel> serverChnls = new ArrayList<>();
+
+                // Store task in locked variable for obj
+                this.owner.objToLockedTask.put(obj, task);
+
+                // Send vote to replica servers
+                for (String serverId : replicas) {
+                    Node selectedServer = this.owner.idToServer.get(serverId);
+
+                    try {
+                        Channel chnl = new Channel(selectedServer.ip, selectedServer.port, selectedServer.id);
+
+                        chnl.send(String.format("SERVER:%s:VOTE:%s:%s:%s", this.owner.id, obj, this.requesterId, ts));
+
+                        serverChnls.add(chnl);
+                    }
+                    catch (IOException ex) {
+                        this.logInfo(String.format("failed to connect to server %s for voting task %s", selectedServer.id, task));
+                    }
+                }
+
+                int voteCount = 0;
+
+                boolean reject = false;
+
+                // Wait for response from reachable replicas
+                for (Channel chnl : serverChnls) {
+                    String response = chnl.recv();
+
+                    String[] params = response.split(":");
+
+                    if (params[0].equals("ERR")) {
+                        this.logInfo(String.format("server %s failed to process vote for task %s", chnl.id, task));
+                    }
+                    else if (params[0].equals("ACK")) {
+                        if (params[1].equals("ACCEPT")) {
+                            voteCount++;
+
+                            this.logInfo(String.format("received accept from %s for task %s", chnl.id, task));
+                        }
+                        else if (params[1].equals("REJECT")) {
+                            reject = true;
+
+                            // TODO: log extra info received for reject
+                            this.logInfo(String.format("received reject from %s for task %s", chnl.id, task)); 
+                        }
+                    }
+                }
+                
+                // If anyone REJECT
+                if (reject) {
+                    this.logInfo(String.format("task %s rejected, exiting lock", task));
+
+                    // Unlock and retry. Note that retry happens by default until executed = true
+                    this.owner.objToLockedTask.remove(obj);
+                }
+                else if (voteCount >= 1) { // If enough replicas ACCEPT
+                    // Perform write
+                    task.execute();
+
+                    // Remove task from queue
+                    this.owner.objToTaskQueue.get(obj).remove(task);
+
+                    // Send release message to reachable replicas. TODO: Convert to multicast function (DRY)
+                    for (Channel chnl : serverChnls) {
+                        chnl.send(String.format("SERVER:%s:RELEASE:%s:%s:%s", this.owner.id, obj, this.requesterId, ts));
+                    }
+
+                    // Get Ack from all reachable replicas
+                    for (Channel chnl : serverChnls) {
+                        String response = chnl.recv();
+
+                        if (!response.equals("ACK:RELEASE")) {
+                            this.logInfo(String.format("failed ack response from server %s", chnl.id));
+                        }
+
+                        chnl.close();
+                    }
+
+                    // Release lock
+                    this.owner.objToLockedTask.remove(obj);
+
+                    // Task completed, exit retry loop
+                    executed = true;
+                }
+            }
+        }
     }
 
-    private void serverHandler() {
+    private void serverVoteHandler(String obj, String taskOwner, long ts) throws InterruptedException {
+        Task voteTask = new Task(taskOwner, null, null, null, ts);
+
+        // Loop until ACCEPT or REJECT
+        while (true) {
+            // Get locked task
+            Task lockedTask = this.owner.objToLockedTask.get(obj);
+
+            // Check if locked task is null, then sleep and try again
+            if (lockedTask.equals(null)) {
+                Thread.sleep(10);
+
+                continue;
+            }
+
+            // Check if locked task same as task being voted, if yes send ACK:ACCEPT
+            if (lockedTask.equals(voteTask)) {
+                this.requesterChannel.send("ACK:ACCEPT");
+
+                break;
+            }
+
+            // Check if task being voted is behind earliest task in queue, if yes send ACK:REJECT
+            Task earliestTask = this.owner.objToTaskQueue.get(obj).peek();
+
+            if (earliestTask.timestamp < voteTask.timestamp || 
+               (earliestTask.timestamp == voteTask.timestamp && earliestTask.ownerId.compareTo(voteTask.ownerId) < 0)) {
+                
+               this.requesterChannel.send("ACK:REJECT"); 
+
+               break;
+            }
+
+            // Sleep and try again hoping that locked task is same as task being voted
+            Thread.sleep(10);
+        }
+    }
+
+    private void serverReleaseHandler(String obj, String taskOwner, long ts) {
+        Task releaseTask = new Task(taskOwner, null, null, null, ts);
+
+        // Loop until released task not present in queue
+        while (this.owner.objToTaskQueue.get(obj).contains(releaseTask)) continue;
         
+        // Send ACK
+        this.requesterChannel.send("ACK:RELEASE");
     }
 }

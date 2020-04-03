@@ -10,6 +10,7 @@ import java.util.concurrent.*;
 public class Node {
     public String id, ip;
     public int port;
+    static String[] fileList = {"f1", "f2", "f3", "f4"};
 
     public Node(String Id) {
         this.id = Id;
