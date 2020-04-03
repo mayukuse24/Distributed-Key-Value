@@ -151,7 +151,7 @@ class requestHandler implements Callable<Integer> {
     public String getLastLine(String file) throws FileNotFoundException, IOException {
         RandomAccessFile fileHandler = null;
 
-        String filePath = String.format("%s/%s", owner.id, file);
+        String filePath = String.format("files/%s/%s", owner.id, file);
 
         try {
             fileHandler = new RandomAccessFile(filePath, "r");
