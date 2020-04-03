@@ -1,3 +1,5 @@
 S1 dc12.utdallas.edu 11010
 S2 dc23.utdallas.edu 11010
 S3 dc35.utdallas.edu 11010
+S4 dc37.utdallas.edu 11010
+S5 dc40.utdallas.edu 11010
