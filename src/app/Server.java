@@ -355,6 +355,8 @@ class requestHandler implements Callable<Integer> {
 
                 // Send vote to replica servers
                 for (String serverId : replicas) {
+                    if (serverId.equals(this.owner.id)) continue; // Skip self from replica list
+
                     Node selectedServer = this.owner.idToServer.get(serverId);
 
                     try {
