@@ -56,6 +56,9 @@ public class Client extends Node {
         String[] fileList = {"f1", "f2", "f3", "f4"};
         String configFile = "config.txt";
         int writeCount = 0,
+            writeSuccess = 0,
+            readCount = 0,
+            readSuccess = 0,
             totalRequests = 10;
 
         Random rand = new Random();
@@ -132,6 +135,8 @@ public class Client extends Node {
                         );
 
                         chnl.close();
+
+                        readSuccess++;
 
                         break; // Successful read response from any one server is sufficient
                     }
@@ -246,10 +251,13 @@ public class Client extends Node {
                         // Clean up socket
                         chnl.close();
                     }
+
+                    writeSuccess++;
                 }
             }
         }
 
-        LOGGER.info(String.format("Write attempts: %s, Read attempts: %s", writeCount, totalRequests - writeCount));
+        LOGGER.info(String.format("Write attempts: %s, Success: %s, Aborted: %s", writeCount, writeSuccess, writeCount - writeSuccess));
+        LOGGER.info(String.format("Read attempts: %s, Success: %s, Failed: %s", readCount, readSuccess, readCount - readSuccess));
     }
 }
