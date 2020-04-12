@@ -104,7 +104,7 @@ public class Client extends Node {
                     try {
                         chnl = new Channel(selectedServer.ip, selectedServer.port);
                     }
-                    catch (ConnectException ex) {
+                    catch (ConnectException | SocketTimeoutException ex) {
                         LOGGER.info(String.format("unable to connect to server %s for reading %s", selectedServer.id, key));
 
                         continue;
@@ -164,7 +164,7 @@ public class Client extends Node {
 
                         replicas = String.format("%s,%s", selectedServer.id, replicas);
                     }
-                    catch (ConnectException ex) {
+                    catch (ConnectException | SocketTimeoutException ex) {
                         LOGGER.info(String.format("unable to connect to server %s for writing %s:%s", selectedServer.id, key, value));
                     }
                     finally {

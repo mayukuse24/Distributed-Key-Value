@@ -13,7 +13,7 @@ public class Channel {
     PrintWriter writer;
     BufferedReader reader;
 
-    Channel(String ip, int port) throws IOException, UnknownHostException {
+    Channel(String ip, int port) throws IOException, UnknownHostException, SocketTimeoutException {
         this.sock = new Socket();
         this.sock.connect(new InetSocketAddress(ip, port), 5000);
 
@@ -22,7 +22,7 @@ public class Channel {
         this.reader = new BufferedReader(new InputStreamReader(this.sock.getInputStream()));
     }
 
-    Channel(String ip, int port, String ID) throws IOException, UnknownHostException {
+    Channel(String ip, int port, String ID) throws IOException, UnknownHostException, SocketTimeoutException {
         this.id = ID;
         
         this.sock = new Socket();

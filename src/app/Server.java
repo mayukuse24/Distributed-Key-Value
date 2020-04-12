@@ -372,7 +372,7 @@ class requestHandler implements Callable<Integer> {
 
                         serverChnls.add(chnl);
                     }
-                    catch (IOException ex) {
+                    catch (IOException | SocketTimeoutException ex) {
                         this.logInfo(String.format("failed to connect to server %s for voting task %s", selectedServer.id, task));
                     }
                 }
