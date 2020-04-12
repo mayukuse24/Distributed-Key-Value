@@ -14,21 +14,30 @@ public class Channel {
     BufferedReader reader;
 
     Channel(String ip, int port) throws IOException, UnknownHostException {
-        this.sock = new Socket(ip, port);
+        this.sock = new Socket();
+        this.sock.connect(new InetSocketAddress(ip, port), 5000);
+
         this.writer = new PrintWriter(this.sock.getOutputStream(), true);
+
         this.reader = new BufferedReader(new InputStreamReader(this.sock.getInputStream()));
     }
 
     Channel(String ip, int port, String ID) throws IOException, UnknownHostException {
         this.id = ID;
-        this.sock = new Socket(ip, port);
+        
+        this.sock = new Socket();
+        this.sock.connect(new InetSocketAddress(ip, port), 5000);
+
         this.writer = new PrintWriter(this.sock.getOutputStream(), true);
+
         this.reader = new BufferedReader(new InputStreamReader(this.sock.getInputStream()));
     }
 
     Channel(Socket tsock) throws IOException, UnknownHostException {
         this.sock = tsock;
+
         this.writer = new PrintWriter(this.sock.getOutputStream(), true);
+
         this.reader = new BufferedReader(new InputStreamReader(this.sock.getInputStream()));
     }
 

@@ -53,9 +53,6 @@ public class Client extends Node {
     }
 
     public static void main(String[] args) throws Exception {
-        PrintWriter writer;
-        BufferedReader reader;
-        Socket reqSocket = null;
         String[] fileList = {"f1", "f2", "f3", "f4"};
         String configFile = "config.txt";
         int writeCount = 0,
@@ -101,21 +98,17 @@ public class Client extends Node {
                 for (Integer sidx : serverIndices) {
                     Node selectedServer = client.serverList.get(sidx);
 
+                    Channel chnl = null;
+
                     // TODO: Handle failure when connection to server fails. Try next server
                     try {
-                        reqSocket = new Socket(selectedServer.ip, selectedServer.port);
+                        chnl = new Channel(selectedServer.ip, selectedServer.port);
                     }
                     catch (ConnectException ex) {
                         LOGGER.info(String.format("unable to connect to server %s for reading %s", selectedServer.id, key));
 
                         continue;
                     }
-
-                    // Create a buffer to send messages
-                    writer = new PrintWriter(reqSocket.getOutputStream(), true);
-        
-                    // Create a buffer to receive messages
-                    reader = new BufferedReader(new InputStreamReader(reqSocket.getInputStream()));
 
                     String readRequest = String.format("CLIENT:%s:READ:%s", client.id, key);
 
@@ -127,9 +120,9 @@ public class Client extends Node {
                     ));
 
                     
-                    writer.println(readRequest);
+                    chnl.send(readRequest);
 
-                    String response = reader.readLine();
+                    String response = chnl.recv();
 
                     String[] params = response.split(":", 2);
 
@@ -138,7 +131,7 @@ public class Client extends Node {
                             String.format("server %s: value of object %s : %s", selectedServer.id, key, params[1])
                         );
 
-                        reqSocket.close();
+                        chnl.close();
 
                         break; // Successful read response from any one server is sufficient
                     }
@@ -147,7 +140,7 @@ public class Client extends Node {
                     }
         
                     // Clean up socket
-                    reqSocket.close();
+                    chnl.close();
                 }
             }
             else { // Send write request
