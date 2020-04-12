@@ -57,6 +57,7 @@ public class Client extends Node {
         BufferedReader reader;
         Socket reqSocket = null;
         String[] fileList = {"f1", "f2", "f3", "f4"};
+        String configFile = "config.txt";
         int writeCount = 0,
             totalRequests = 10;
 
@@ -64,18 +65,18 @@ public class Client extends Node {
 
         Applog.init();
 
-        if (args.length < 1) {
-            throw new InvalidParameterException("Incorrect number of parameters for program");
+        if (args.length < 3) {
+            throw new InvalidParameterException("Missing parameters. java prog <client-id> <total-requests> <config-file>");
         }
         
         Client client = new Client(args[0]);
 
-        if (args.length == 2) {
-            totalRequests = Integer.parseInt(args[1]);
-        }
+        totalRequests = Integer.parseInt(args[1]);
+
+        configFile = args[2];
 
         // Load server config from file
-        client.loadConfig("config.txt");
+        client.loadConfig(configFile);
 
         for (int i = 0; i < totalRequests; i++) {
             // Randomly select an object

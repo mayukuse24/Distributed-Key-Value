@@ -77,9 +77,10 @@ public class Server extends Node {
     public static void main(String[] args) throws IOException {
         // Sets the thread pool size. TODO: make this parameter dynamic
         int MAX_POOL_SIZE = 7;
+        String configFile = "config.txt";
 
-        if (args.length != 3) {
-            throw new InvalidParameterException("required parameters <servername> <ip> <port>");
+        if (args.length < 4) {
+            throw new InvalidParameterException("required parameters <servername> <ip> <port> <config-file>");
         }
 
         // Initialize logger
@@ -93,8 +94,10 @@ public class Server extends Node {
 
         LOGGER.info(String.format("server %s starts at time: %s", selfServer.id, instant.toEpochMilli()));
 
+        configFile = args[3];
+
         // Get list of available file servers from config.txt file TODO: remove hard coded values
-        selfServer.loadConfig("config.txt");
+        selfServer.loadConfig(configFile);
 
         // Create a thread pool
         final ExecutorService service = Executors.newFixedThreadPool(MAX_POOL_SIZE);
@@ -384,10 +387,7 @@ class requestHandler implements Callable<Integer> {
 
                     String[] params = response.split(":");
 
-                    if (params[0].equals("ERR")) {
-                        this.logInfo(String.format("server %s failed to process vote for task %s", chnl.id, task));
-                    }
-                    else if (params[0].equals("ACK")) {
+                    if (params[0].equals("ACK")) {
                         if (params[1].equals("ACCEPT")) {
                             voteCount++;
 
@@ -399,6 +399,9 @@ class requestHandler implements Callable<Integer> {
                             // TODO: log extra info received for reject
                             this.logInfo(String.format("received reject from %s for task %s", chnl.id, task)); 
                         }
+                    }
+                    else {
+                        this.logInfo(String.format("server %s failed to process vote for task %s", chnl.id, task));
                     }
                 }
                 
