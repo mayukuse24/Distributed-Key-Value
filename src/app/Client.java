@@ -96,6 +96,8 @@ public class Client extends Node {
             if (rwbit == 0) {                
                 LOGGER.info(String.format("sending read request..."));
 
+                readCount++;
+                
                 Collections.shuffle(serverIndices);
 
                 for (Integer sidx : serverIndices) {
